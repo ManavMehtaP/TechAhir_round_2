@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live Auctions</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --text:#e8eaf0; --muted:#8b93a7; --accent:#6ea8fe; --good:#3ddc97; --bad:#ff6b6b; --warn:#ffb454;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:14px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+  header h1{font-size:18px;margin:0;letter-spacing:.3px;cursor:pointer}
+  header h1 span{color:var(--accent)}
+  .spacer{flex:1}
+  .me{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
+  .me b{color:var(--text)}
+  input,button,select{font:inherit}
+  input{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:9px 11px;border-radius:8px;outline:none;min-width:0}
+  input:focus{border-color:var(--accent)}
+  button{background:var(--accent);color:#08111f;border:0;padding:9px 16px;border-radius:8px;font-weight:600;cursor:pointer}
+  button:hover{filter:brightness(1.08)} button:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  button.warn{background:var(--warn)}
+  button.small{padding:6px 12px;font-size:13px}
+  main{max-width:1000px;margin:0 auto;padding:24px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  .auc{cursor:pointer;transition:border-color .15s,transform .15s}
+  .auc:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .auc h3{margin:0 0 6px;font-size:16px}
+  .muted{color:var(--muted)} .small{font-size:12.5px}
+  .price{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+  .badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11.5px;font-weight:700;letter-spacing:.4px}
+  .badge.open{background:rgba(61,220,151,.15);color:var(--good)}
+  .badge.closed{background:rgba(139,147,167,.15);color:var(--muted)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  form.create{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;margin-bottom:12px}
+  form.create label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted)}
+  h2{font-size:15px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:26px 0 12px}
+  .hero{display:grid;grid-template-columns:1.3fr 1fr;gap:18px}
+  @media(max-width:760px){.hero{grid-template-columns:1fr}}
+  .big{font-size:56px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05}
+  .timer{font-size:38px;font-weight:700;font-variant-numeric:tabular-nums}
+  .timer.hot{color:var(--bad);animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.55}}
+  .flash{animation:flash .7s}
+  @keyframes flash{0%{background:rgba(110,168,254,.35)}100%{background:transparent}}
+  .ext{display:inline-block;margin-left:8px;color:var(--warn);font-size:14px;font-weight:700;opacity:0;transition:opacity .3s}
+  .ext.show{opacity:1}
+  .banner{padding:16px;border-radius:12px;background:rgba(61,220,151,.12);border:1px solid var(--good);margin-bottom:16px;font-size:17px}
+  .banner.none{background:rgba(139,147,167,.12);border-color:var(--line)}
+  .msg{min-height:20px;margin-top:10px;font-size:13.5px} .msg.err{color:var(--bad)} .msg.ok{color:var(--good)}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  td,th{text-align:left;padding:7px 4px;border-bottom:1px solid var(--line);font-size:13.5px}
+  th{color:var(--muted);font-weight:500}
+  td.r,th.r{text-align:right}
+  tr.link{cursor:pointer} tr.link:hover td{background:var(--panel2)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--bad);margin-right:6px}
+  .dot.live{background:var(--good)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:6px}
+  .stat .n{font-size:30px;font-weight:800}
+  .you{color:var(--good)}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="home">Live<span>Auctions</span></h1>
+  <div class="spacer"></div>
+  <div class="me">
+    <span>Signed in as <b id="meName"></b></span>
+    <button class="ghost small" id="accountBtn">My account</button>
+    <button class="ghost small" id="logoutBtn">Log out</button>
+  </div>
+</header>
+
+<main>
+  <!-- LIST -->
+  <section id="listView">
+    <div class="card">
+      <h3 style="margin-top:0">Create an auction</h3>
+      <form class="create" id="createForm">
+        <label>Title<input id="c_title" value="Vintage watch" required></label>
+        <label>Start price (₹)<input id="c_price" type="number" min="0" value="1000" required></label>
+        <label>Min increment (₹)<input id="c_inc" type="number" min="1" value="100" required></label>
+        <label>Duration (sec)<input id="c_dur" type="number" min="5" value="90" required></label>
+        <button type="submit">Create</button>
+      </form>
+      <div class="msg" id="createMsg"></div>
+    </div>
+    <h2>Auctions</h2>
+    <div class="grid" id="grid"></div>
+    <p class="muted" id="emptyMsg" hidden>No auctions yet. Create one above.</p>
+  </section>
+
+  <!-- DETAIL -->
+  <section id="detailView" hidden>
+    <div class="row" style="margin-bottom:14px">
+      <button class="ghost" id="back">&larr; All auctions</button>
+      <span class="small muted"><span class="dot" id="liveDot"></span><span id="liveTxt">connecting…</span></span>
+    </div>
+    <div id="closedBanner" hidden></div>
+    <div class="hero">
+      <div class="card" id="priceCard">
+        <div class="row" style="justify-content:space-between">
+          <h2 style="margin:0" id="d_title"></h2><span class="badge" id="d_badge"></span>
+        </div>
+        <div class="muted small" id="d_seller" style="margin:6px 0 14px"></div>
+        <div class="muted small">Current price</div>
+        <div class="big" id="d_price">–</div>
+        <div class="muted" style="margin-top:6px">Leader: <b id="d_leader">no bids yet</b> · <span id="d_count">0</span> bids</div>
+      </div>
+      <div class="card">
+        <div class="muted small">Time remaining<span class="ext" id="d_ext">+30s</span></div>
+        <div class="timer" id="d_timer">–</div>
+        <div class="muted small" id="d_hint" style="margin-bottom:14px">A bid in the final 30s extends the auction by 30s.</div>
+        <div class="row">
+          <input id="b_amount" type="number" style="flex:1" placeholder="Your bid (₹)">
+          <button id="b_go">Place bid</button>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="ghost" id="b_min">Bid minimum</button>
+          <button class="warn" id="b_rush" title="Fires 30 simultaneous bids from your account to show concurrency handling">Simulate rush</button>
+        </div>
+        <div class="msg" id="b_msg"></div>
+      </div>
+    </div>
+    <h2>Bid history</h2>
+    <div class="card">
+      <table><thead><tr><th>#</th><th>Bidder</th><th class="r">Amount</th></tr></thead><tbody id="hist"></tbody></table>
+      <p class="muted small" id="noBids">No bids yet.</p>
+    </div>
+  </section>
+
+  <!-- ACCOUNT -->
+  <section id="accountView" hidden>
+    <div class="row" style="margin-bottom:14px"><button class="ghost" id="back2">&larr; All auctions</button></div>
+    <div class="card">
+      <h2 style="margin:0 0 4px" id="a_name"></h2>
+      <div class="muted small" id="a_since" style="margin-bottom:16px"></div>
+      <div class="stats">
+        <div class="card stat"><div class="n" id="a_bids">0</div><div class="muted small">Bids placed</div></div>
+        <div class="card stat"><div class="n" id="a_won">0</div><div class="muted small">Auctions won</div></div>
+        <div class="card stat"><div class="n" id="a_created">0</div><div class="muted small">Auctions created</div></div>
+      </div>
+    </div>
+    <h2>Auctions I won</h2>
+    <div class="card">
+      <table><thead><tr><th>Item</th><th class="r">Winning bid</th></tr></thead><tbody id="a_wonRows"></tbody></table>
+      <p class="muted small" id="a_noWon">No wins yet.</p>
+    </div>
+    <h2>My recent bids</h2>
+    <div class="card">
+      <table><thead><tr><th>Item</th><th class="r">Amount</th><th class="r">When</th></tr></thead><tbody id="a_bidRows"></tbody></table>
+      <p class="muted small" id="a_noBids">You haven't bid on anything yet.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const money = n => '₹' + Number(n).toLocaleString('en-IN');
+const TOKEN = localStorage.getItem('token');
+const ME = localStorage.getItem('username') || '';
+if (!TOKEN) location.replace('/login.html');
+$('meName').textContent = ME;
+
+let offset = 0;                       // serverTime - clientTime (seconds)
+const nowS = () => Date.now()/1000 + offset;
+
+function clearSession(){ localStorage.removeItem('token'); localStorage.removeItem('username'); }
+function logout(){
+  fetch('/auth/logout', {method:'POST', headers:{Authorization:'Bearer ' + TOKEN}})
+    .finally(() => { clearSession(); location.replace('/login.html'); });
+}
+$('logoutBtn').onclick = logout;
+$('accountBtn').onclick = () => { location.hash = '#/account'; };
+
+async function api(path, opts = {}){
+  const headers = {...(opts.headers || {}), Authorization: 'Bearer ' + TOKEN};
+  const r = await fetch(path, {...opts, headers});
+  if (r.status === 401){ clearSession(); location.replace('/login.html'); return {status:401, ok:false, body:null}; }
+  let body = null; try { body = await r.json(); } catch(e){}
+  return {status:r.status, ok:r.ok, body};
+}
+const post = (path, data) => api(path, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(data)});
+const fmtTime = s => {
+  s = Math.max(0, s); const m = Math.floor(s/60), sec = Math.floor(s%60), t = Math.floor((s*10)%10);
+  return s < 60 ? `${sec}.${t}s` : `${m}:${String(sec).padStart(2,'0')}`;
+};
+const fmtDate = ts => new Date(ts*1000).toLocaleString();
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; };
+
+// ---- router ---------------------------------------------------------
+let poll = null, tick = null, ws = null, wsRetry = 0, current = null, state = null, histTimer = null;
+function show(name){ for (const v of ['listView','detailView','accountView']) $(v).hidden = v !== name; }
+function route(){
+  teardown();
+  const m = location.hash.match(/^#\/auction\/(.+)$/);
+  if (m) showDetail(decodeURIComponent(m[1]));
+  else if (location.hash === '#/account') showAccount();
+  else showList();
+}
+window.addEventListener('hashchange', route);
+$('home').onclick = $('back').onclick = $('back2').onclick = () => { location.hash = ''; };
+function teardown(){
+  clearInterval(poll); clearInterval(tick); clearTimeout(histTimer);
+  if (ws){ ws.onclose = null; ws.close(); ws = null; }
+  current = null; state = null;
+}
+const openAuction = id => { location.hash = '#/auction/' + encodeURIComponent(id); };
+
+// ---- list view ------------------------------------------------------
+let listData = [];
+async function loadList(){
+  const r = await api('/auctions'); if (!r.ok) return;
+  offset = r.body.server_time - Date.now()/1000;
+  listData = r.body.auctions; renderList();
+}
+function renderList(){
+  const g = $('grid'); g.innerHTML = '';
+  $('emptyMsg').hidden = listData.length > 0;
+  for (const a of listData){
+    const open = a.status === 'OPEN';
+    const card = el('div', undefined, 'card auc');
+    card.onclick = () => openAuction(a.auction_id);
+    const top = el('div', undefined, 'row'); top.style.justifyContent = 'space-between';
+    top.append(el('h3', a.title), el('span', open ? 'LIVE' : 'ENDED', 'badge ' + (open ? 'open' : 'closed')));
+    const meta = el('div', open
+      ? `${a.bid_count} bids · ends in ${fmtTime(a.end_time - nowS())}`
+      : (a.winner ? `Won by ${a.winner} at ${money(a.winning_amount)}` : 'Ended with no bids'), 'muted small');
+    card.append(top, el('div', money(a.current_price), 'price'), meta); g.append(card);
+  }
+}
+function showList(){
+  show('listView');
+  loadList(); poll = setInterval(loadList, 1500); tick = setInterval(renderList, 500);
+}
+$('createForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = $('c_title').value.trim();
+  const id = (title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'auction') + '-' + Math.random().toString(36).slice(2,6);
+  const r = await post('/auctions', {
+    id, title, start_price: +$('c_price').value, min_increment: +$('c_inc').value, duration_seconds: +$('c_dur').value
+  });
+  const m = $('createMsg');
+  if (r.ok){ m.className = 'msg ok'; m.textContent = 'Created. Opening…'; openAuction(id); }
+  else if (r.status !== 401){
+    let d = r.body && r.body.detail; if (Array.isArray(d)) d = d.map(x => x.msg).join('; ');
+    m.className = 'msg err'; m.textContent = d || 'Could not create';
+  }
+});
+
+// ---- account view ---------------------------------------------------
+async function showAccount(){
+  show('accountView');
+  const r = await api('/me/summary'); if (!r.ok) return;
+  const s = r.body;
+  $('a_name').textContent = s.username;
+  $('a_since').textContent = s.member_since ? 'Member since ' + fmtDate(s.member_since) : '';
+  $('a_bids').textContent = s.bids_placed; $('a_won').textContent = s.auctions_won.length; $('a_created').textContent = s.auctions_created;
+  const won = $('a_wonRows'); won.innerHTML = ''; $('a_noWon').hidden = s.auctions_won.length > 0;
+  for (const w of s.auctions_won){
+    const tr = el('tr', undefined, 'link'); tr.onclick = () => openAuction(w.auction_id);
+    const amt = el('td', money(w.amount), 'r'); tr.append(el('td', w.title), amt); won.append(tr);
+  }
+  const bids = $('a_bidRows'); bids.innerHTML = ''; $('a_noBids').hidden = s.recent_bids.length > 0;
+  for (const b of s.recent_bids){
+    const tr = el('tr', undefined, 'link'); tr.onclick = () => openAuction(b.auction_id);
+    tr.append(el('td', b.title), el('td', money(b.amount), 'r'), el('td', fmtDate(b.at), 'r')); bids.append(tr);
+  }
+}
+
+// ---- detail view ----------------------------------------------------
+async function showDetail(id){
+  current = id; show('detailView');
+  $('closedBanner').hidden = true; $('b_msg').textContent = ''; $('hist').innerHTML = '';
+  delete $('b_amount').dataset.touched;
+  const r = await api('/auctions/' + encodeURIComponent(id));
+  if (current !== id) return;
+  if (!r.ok){ $('d_title').textContent = 'Auction not found'; return; }
+  applyState(r.body);
+  loadHistory();
+  connectWS(id);
+  tick = setInterval(renderTimer, 100);
+}
+function applyState(s){
+  if (s.server_time) offset = s.server_time - Date.now()/1000;
+  if (state && s.version < state.version) return;          // drop stale
+  const prevPrice = state && state.current_price;
+  const prevEnd = state && state.end_time;
+  state = s;
+  const isSeller = s.seller === ME;
+  $('d_title').textContent = s.title;
+  $('d_seller').textContent = 'Seller: ' + s.seller + (isSeller ? ' (you)' : '');
+  $('d_price').textContent = money(s.current_price);
+  const lead = $('d_leader');
+  lead.textContent = s.leader ? (s.leader === ME ? s.leader + ' (you)' : s.leader) : 'no bids yet';
+  lead.className = s.leader === ME ? 'you' : '';
+  $('d_count').textContent = s.bid_count;
+  const open = s.status === 'OPEN';
+  const b = $('d_badge'); b.className = 'badge ' + (open ? 'open' : 'closed'); b.textContent = open ? 'LIVE' : 'ENDED';
+  if (prevPrice !== null && prevPrice !== undefined && prevPrice !== s.current_price){
+    const c = $('priceCard'); c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+  }
+  if (prevEnd && s.end_time > prevEnd){
+    const x = $('d_ext'); x.textContent = '+' + Math.round(s.end_time - prevEnd) + 's'; x.classList.add('show');
+    setTimeout(() => x.classList.remove('show'), 2200);
+  }
+  const amt = $('b_amount');
+  if (!amt.dataset.touched || +amt.value < s.min_next_bid) amt.value = s.min_next_bid;
+  const canBid = open && !isSeller;
+  $('b_go').disabled = $('b_min').disabled = $('b_rush').disabled = !canBid;
+  $('b_min').textContent = 'Bid minimum (' + money(s.min_next_bid) + ')';
+  $('d_hint').textContent = isSeller ? "You are the seller, so you can't bid on this auction."
+                                     : 'A bid in the final 30s extends the auction by 30s.';
+  if (!open) showClosed(s);
+  renderTimer();
+}
+$('b_amount').addEventListener('input', e => e.target.dataset.touched = '1');
+
+let staleSince = null;
+function renderTimer(){
+  if (!state) return;
+  const t = $('d_timer');
+  if (state.status === 'CLOSED'){ t.textContent = 'Ended'; t.classList.remove('hot'); return; }
+  const rem = state.end_time - nowS();
+  if (rem <= 0){
+    t.textContent = 'Closing…';
+    if (!staleSince) staleSince = Date.now();
+    if (Date.now() - staleSince > 1500){ staleSince = Date.now(); api('/auctions/' + encodeURIComponent(current)).then(r => r.ok && applyState(r.body)); }
+    return;
+  }
+  staleSince = null;
+  t.textContent = fmtTime(rem);
+  t.classList.toggle('hot', rem <= 30);
+}
+function showClosed(s){
+  const b = $('closedBanner'); b.hidden = false;
+  b.className = 'banner' + (s.winner ? '' : ' none');
+  b.textContent = s.winner
+    ? `🏆 Sold! ${s.winner}${s.winner === ME ? ' (you)' : ''} won with a bid of ${money(s.winning_amount)}.`
+    : 'Auction ended with no bids.';
+}
+async function loadHistory(){
+  if (!current) return;
+  const r = await api('/auctions/' + encodeURIComponent(current) + '/bids?limit=25');
+  if (!r.ok) return;
+  const body = $('hist'); body.innerHTML = '';
+  $('noBids').hidden = r.body.bids.length > 0;
+  for (const b of r.body.bids){
+    const tr = el('tr'); tr.append(el('td', b.seq), el('td', b.bidder === ME ? b.bidder + ' (you)' : b.bidder), el('td', money(b.amount), 'r')); body.append(tr);
+  }
+}
+function scheduleHistory(){ clearTimeout(histTimer); histTimer = setTimeout(loadHistory, 250); }
+
+function connectWS(id){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/auctions/${encodeURIComponent(id)}/ws`);
+  ws.onopen = () => { wsRetry = 0; $('liveDot').classList.add('live'); $('liveTxt').textContent = 'live'; };
+  ws.onmessage = m => {
+    const ev = JSON.parse(m.data);
+    applyState(ev);
+    if (ev.type !== 'snapshot') scheduleHistory();
+  };
+  ws.onclose = () => {
+    $('liveDot').classList.remove('live'); $('liveTxt').textContent = 'reconnecting…';
+    if (current !== id) return;
+    if (state && state.status === 'CLOSED') { $('liveTxt').textContent = 'finished'; return; }
+    wsRetry++; setTimeout(() => current === id && connectWS(id), Math.min(5000, 300 * wsRetry));
+  };
+}
+
+// ---- bidding --------------------------------------------------------
+const bid = amount => post('/auctions/' + encodeURIComponent(current) + '/bids',
+                           {amount, idempotency_key: crypto.randomUUID()});
+async function submit(amount){
+  const m = $('b_msg'); m.className = 'msg'; m.textContent = 'Sending…';
+  const r = await bid(amount);
+  if (r.status === 401) return;
+  if (r.body && r.body.accepted){
+    m.className = 'msg ok';
+    m.textContent = `Bid accepted at ${money(amount)}` + (r.body.extended ? ' — auction extended!' : '');
+  } else {
+    m.className = 'msg err';
+    m.textContent = (r.body && (r.body.message || r.body.detail)) || 'Bid rejected';
+    if (r.body && r.body.min_next_bid) $('b_amount').value = r.body.min_next_bid;
+  }
+}
+$('b_go').onclick = () => submit(parseInt($('b_amount').value, 10));
+$('b_min').onclick = () => state && submit(state.min_next_bid);
+$('b_amount').addEventListener('keydown', e => { if (e.key === 'Enter') $('b_go').click(); });
+
+// 30 requests fire at the same instant at overlapping amounts: the server accepts a strictly
+// increasing subset and rejects the rest, never two bids at the same price level.
+$('b_rush').onclick = async () => {
+  if (!state) return;
+  const base = state.min_next_bid, inc = state.min_increment;
+  const m = $('b_msg'); m.className = 'msg'; m.textContent = 'Firing 30 simultaneous bids…';
+  const res = await Promise.all(Array.from({length: 30}, (_, i) => bid(base + (i % 6) * inc)));
+  const ok = res.filter(r => r.body && r.body.accepted).length;
+  m.className = 'msg ok'; m.textContent = `Rush finished: ${ok} accepted, ${30 - ok} rejected. Every accepted bid was strictly higher than the last.`;
+};
+
+if (TOKEN) route();
+</script>
+</body>
+</html>
