@@ -160,8 +160,13 @@ function HomePage(){
 
   function draw(list){
     const open = list.filter(a => a.status === 'OPEN');
-    const popular = [...open].sort((a, b) => b.bid_count - a.bid_count || a.end_time - b.end_time);
-    const ending = [...open].sort((a, b) => a.end_time - b.end_time).slice(0, 4);
+        const popular = [...open].sort((a, b) => b.bid_count - a.bid_count || a.end_time - b.end_time);
+    const ending = [...open].sort((a, b) => a.end_time - b.end_time).slice(0, 4);       // truly the soonest to end
+    const endingIds = new Set(ending.map(a => a.auction_id));
+    const pool = popular.filter(a => !endingIds.has(a.auction_id));                      // no duplicates between sections
+    const base = pool.length ? pool : popular;
+    const fullRows = n => n >= 8 ? 8 : n >= 4 ? 4 : n;                                   // never leave an orphan row
+    const featuredList = base.slice(0, fullRows(base.length));
     const featured = popular[0];
     const totalBids = list.reduce((n, a) => n + a.bid_count, 0);
 
@@ -192,7 +197,7 @@ function HomePage(){
 
     const featuredSec = h('section', {class: 'section'}, wrap(
       sectionHead('Featured Live Auctions', 'The most active auctions right now', 'View all', '#/auctions'),
-      popular.length ? h('div', {class: 'grid'}, popular.slice(0, 6).map(AuctionCard))
+            featuredList.length ? h('div', {class: 'grid'}, featuredList.map(AuctionCard))
                      : emptyBlock('No live auctions right now', 'Create the first one and start the bidding.', 'Create an auction', () => go('/create'))));
 
     const counts = Object.fromEntries(CATEGORIES.map(c => [c, open.filter(a => a.category === c).length]));
@@ -204,7 +209,14 @@ function HomePage(){
       sectionHead('Ending Soon', 'Last chance. Remember: a bid in the final 30 seconds extends the auction.', 'See all', '#/auctions'),
       h('div', {class: 'grid'}, ending.map(AuctionCard)))) : null;
 
-    root.replaceChildren(...[hero, featuredSec, catSec, endSec].filter(Boolean));
+        const steps = [['1', 'Create your account', 'Sign up in seconds and start watching live auctions.'],
+      ['2', 'Bid in real time', 'Prices update instantly for everyone watching. The server decides every bid.'],
+      ['3', 'Win fairly', 'A bid in the last 30 seconds adds 30 seconds, so nobody wins by sniping.']];
+    const howSec = h('section', {class: 'section'}, wrap(
+      sectionHead('How BIDZONE works', 'Fast, fair and transparent'),
+      h('div', {class: 'steps'}, steps.map(([n, t, d]) => h('div', {class: 'card step'}, h('span', {class: 'num'}, n), h('b', null, t), h('p', {class: 'muted'}, d))))));
+
+    root.replaceChildren(...[hero, featuredSec, catSec, endSec, howSec].filter(Boolean));
   }
   async function load(){
     try {
@@ -298,7 +310,7 @@ function CategoriesPage(){
 function AuctionDetailPage(id){
   const root = wrap(h('div', {style: 'padding:40px 0'}, loadingGrid(2)));
   const me = Auth.username;
-  let state = null, sock = null, histTimer = null, alive = true, submitting = false, live = false, R = null;
+    let state = null, sock = null, histTimer = null, alive = true, submitting = false, live = false, hasBid = false, R = null;
 
   async function init(){
     root.replaceChildren(h('div', {style: 'padding:40px 0'}, loadingGrid(2)));
@@ -329,7 +341,8 @@ function AuctionDetailPage(id){
     R.price = h('div', {class: 'bigprice'}); R.priceCap = h('div', {class: 'muted small', style: 'margin-top:4px'});
     R.start = h('b'); R.minNext = h('b'); R.parts = h('b'); R.bids = h('b'); R.leader = h('b');
     R.cd = h('span', {class: 'cd timer'}); R.ext = h('span', {class: 'ext'});
-    R.live = h('span', {class: 'muted small'}, 'connecting…');
+        R.live = h('span', {class: 'muted small'}, 'connecting…');
+    R.status = h('div', {class: 'youlead', hidden: true});
     R.note = h('div', {class: 'muted small', style: 'margin-top:10px'});
     R.input = h('input', {class: 'input', type: 'number', inputmode: 'numeric', min: '1', step: '1', placeholder: 'Enter your bid',
       'aria-label': 'Your bid amount', onkeydown: e => { if (e.key === 'Enter') submit(); }, oninput: () => { R.input.dataset.touched = '1'; setMsg(''); }});
@@ -341,12 +354,12 @@ function AuctionDetailPage(id){
     R.title = h('h1'); R.chip = h('span', {class: 'chip'});
     R.desc = h('div', {class: 'desc'});
 
-    const left = h('div', null,
-      h('div', {class: 'hero-img media'}, productImg(s), R.badge),
-      h('div', {class: 'panel', style: 'margin-top:18px'}, h('h3', {class: 'sec'}, 'Description'), R.desc),
+       const imgBox = h('div', {class: 'd-img'}, h('div', {class: 'hero-img media'}, productImg(s), R.badge));
+    const info = h('div', {class: 'd-info'},
+      h('div', {class: 'panel'}, h('h3', {class: 'sec'}, 'Description'), R.desc),
       h('div', {class: 'panel'}, h('h3', {class: 'sec'}, 'Seller'),
         h('div', {class: 'seller'}, R.sellerAv, h('div', null, R.sellerName, R.sellerMeta))));
-    const right = h('div', {class: 'sticky'}, h('div', {class: 'panel'},
+    const right = h('div', {class: 'd-bid sticky'}, h('div', {class: 'panel'},
       R.chip, R.title, h('div', {class: 'muted small'}, R.live),
       h('div', {style: 'margin-top:20px'}, h('div', {class: 'muted small'}, 'CURRENT HIGHEST BID'), R.price, R.priceCap),
       h('div', {class: 'kv'},
@@ -355,15 +368,15 @@ function AuctionDetailPage(id){
         h('div', {style: 'grid-column:1/-1'}, h('small', null, 'Leading bidder'), R.leader)),
       h('div', {style: 'padding:14px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:18px'},
         h('div', {class: 'muted small'}, 'TIME REMAINING', R.ext), R.cd),
-      h('div', {class: 'bidrow'}, h('div', {class: 'input-prefix'}, h('span', null, '₹'), R.input), R.btn),
-      R.quick, R.msg, R.note));
+      R.status,
+      h('div', {class: 'bidrow'}, h('div', {class: 'input-prefix'}, h('span', null, '₹'), R.input), R.btn),      R.quick, R.msg, R.note));
     const history = h('div', {class: 'panel', style: 'margin-top:26px'}, h('h3', {class: 'sec'}, 'Bid history'),
       h('table', null, h('thead', null, h('tr', null, h('th', null, '#'), h('th', null, 'Bidder'), h('th', {class: 'r'}, 'Amount'), h('th', {class: 'r'}, 'Time'))), R.hist), R.histEmpty);
 
     root.replaceChildren(
       h('button', {class: 'back', onclick: () => go('/auctions')}, '← Back to auctions'),
       R.banner,
-      h('div', {class: 'detail'}, left, right),
+           h('div', {class: 'detail'}, imgBox, right, info),
       history);
     R.title.textContent = s.title; R.chip.textContent = s.category; R.desc.textContent = s.description || 'The seller has not added a description.';
     if (!s.description) R.desc.classList.add('muted');
@@ -384,6 +397,7 @@ function AuctionDetailPage(id){
     R.parts.textContent = s.participants; R.bids.textContent = s.bid_count;
     R.leader.textContent = s.leader ? (s.leader === me ? s.leader + ' (you)' : s.leader) : 'No bids yet';
     R.leader.className = s.leader === me ? 'good' : '';
+    updateStatus();
     setCountdown(R.cd, s); tickOne(R.cd);
 
     if (prev && prev.current_price !== s.current_price){ R.price.classList.remove('flash'); void R.price.offsetWidth; R.price.classList.add('flash'); }
@@ -409,6 +423,13 @@ function AuctionDetailPage(id){
       R.banner.textContent = s.winner ? `🏆 Sold! ${s.winner}${s.winner === me ? ' (you)' : ''} won with a bid of ${money(s.winning_amount)}.` : 'This auction ended with no bids.';
     }
   }
+    function updateStatus(){
+    if (!R || !state) return;
+    const mine = state.leader === me, show = state.status === 'OPEN' && (mine || hasBid);
+    R.status.hidden = !show;
+    R.status.className = 'youlead ' + (mine ? 'good' : 'bad');
+    R.status.textContent = mine ? "✔ You're the highest bidder" : "You've been outbid. Raise your bid to take the lead.";
+  }
 
   function setLive(status){
     live = status === 'live';
@@ -432,7 +453,7 @@ function AuctionDetailPage(id){
       toast(`Your bid of ${money(amount)} was accepted.`, 'success', 'Bid placed');
       if (r.body.extended) toast('Your bid extended the auction by 30 seconds.', 'info');
       setMsg(`Bid accepted at ${money(amount)}.`, true);
-      R.input.dataset.touched = '';
+            R.input.dataset.touched = ''; hasBid = true;
       if (!live) refresh();                                                // no WebSocket: pull the new state
     } else {
       const m = errMsg(r, 'Your bid was rejected.');
@@ -449,7 +470,8 @@ function AuctionDetailPage(id){
     if (!alive) return;
     const r = await api('/auctions/' + encodeURIComponent(id) + '/bids?limit=30');
     if (!alive || !r.ok || !R) return;
-    R.histEmpty.hidden = r.body.bids.length > 0;
+        R.histEmpty.hidden = r.body.bids.length > 0;
+    hasBid = hasBid || r.body.bids.some(b => b.bidder === me); updateStatus();
     R.hist.replaceChildren(...r.body.bids.map(b => h('tr', null, h('td', null, b.seq),
       h('td', null, b.bidder === me ? b.bidder + ' (you)' : b.bidder), h('td', {class: 'r gold'}, money(b.amount)),
       h('td', {class: 'r muted'}, new Date(b.at * 1000).toLocaleTimeString()))));

@@ -46,11 +46,12 @@ function setCountdown(el, a){
   else { delete el.dataset.closed; el.dataset.end = a.end_time; }
 }
 function tickOne(el){
-  if (el.dataset.closed){ el.textContent = 'Ended'; el.classList.remove('hot'); return; }
+  if (el.dataset.closed){ el.textContent = 'Ended';el.classList.remove('hot', 'soon'); return; }
   const rem = Number(el.dataset.end) - Clock.now();
-  if (rem <= 0){ el.textContent = 'Closing…'; el.classList.remove('hot'); return; }
+  if (rem <= 0){ el.textContent = 'Closing…'; el.classList.remove('hot', 'soon'); return; }
   el.textContent = fmtRemaining(rem);
-  el.classList.toggle('hot', rem <= 30);
+    el.classList.toggle('hot', rem <= 30);
+    el.classList.toggle('soon', rem > 30 && rem <= 300);       // last 5 minutes: amber
 }
 setInterval(() => document.querySelectorAll('.cd').forEach(tickOne), 200);
 
