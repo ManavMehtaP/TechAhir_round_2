@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · BIDZONE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+<div class="auth-wrap">
+  <aside class="auth-art">
+    <a class="logo" href="/" style="font-size:30px">BID<span>ZONE</span></a>
+    <h2>Bid. Win. Own Something <em>Extraordinary.</em></h2>
+    <p>Live auctions with real-time prices and a fair finish: a late bid extends the clock, so nobody wins by sniping the last instant.</p>
+  </aside>
+
+  <section class="auth-form">
+    <div class="auth-box">
+      <!-- shown only when a valid session already exists -->
+      <div class="continue" id="continueBox" hidden>
+        <div>You're signed in as <b class="gold" id="contName"></b></div>
+        <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+          <a class="btn btn-gold small" href="/app.html">Continue to BIDZONE</a>
+          <button class="btn btn-ghost small" id="switchBtn" type="button">Use a different account</button>
+        </div>
+      </div>
+
+      <h1 class="serif" id="heading" style="font-size:30px;margin:0 0 6px">Welcome back</h1>
+      <p class="muted" id="sub" style="margin:0 0 22px">Sign in to bid and sell.</p>
+
+      <div class="tabs">
+        <button id="tabLogin" class="on" type="button">Sign in</button>
+        <button id="tabReg" type="button">Create account</button>
+      </div>
+
+      <form id="form" novalidate>
+        <div class="field">
+          <label for="u">Username</label>
+          <input class="input" id="u" autocomplete="username" maxlength="32" autofocus>
+        </div>
+        <div class="field">
+          <label for="p">Password</label>
+          <input class="input" id="p" type="password" autocomplete="current-password" maxlength="128">
+        </div>
+        <p class="muted small" id="hint" hidden style="margin:-6px 0 14px">Username: 3-32 letters, digits or underscore. Password: at least 8 characters.</p>
+        <button class="btn btn-gold block" id="go" type="submit">Sign in</button>
+        <div class="err" id="msg" role="alert"></div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = 'login';
+
+// The login page is always shown first. If a valid session exists we only OFFER to continue.
+(async () => {
+  const t = localStorage.getItem('token');
+  if (!t) return;
+  try {
+    const r = await fetch('/auth/me', {headers: {Authorization: 'Bearer ' + t}});
+    if (r.ok) {
+      const me = await r.json();
+      $('contName').textContent = me.username;
+      $('continueBox').hidden = false;
+    } else { localStorage.removeItem('token'); localStorage.removeItem('username'); }
+  } catch (e) {}
+})();
+
+$('switchBtn').onclick = async () => {
+  const t = localStorage.getItem('token');
+  try { await fetch('/auth/logout', {method: 'POST', headers: {Authorization: 'Bearer ' + t}}); } catch (e) {}
+  localStorage.removeItem('token'); localStorage.removeItem('username');
+  $('continueBox').hidden = true;
+};
+
+function setMode(m){
+  mode = m;
+  $('tabLogin').classList.toggle('on', m === 'login');
+  $('tabReg').classList.toggle('on', m === 'register');
+  $('go').textContent = m === 'login' ? 'Sign in' : 'Create account';
+  $('heading').textContent = m === 'login' ? 'Welcome back' : 'Join BIDZONE';
+  $('sub').textContent = m === 'login' ? 'Sign in to bid and sell.' : 'It takes ten seconds.';
+  $('hint').hidden = m === 'login';
+  $('p').autocomplete = m === 'login' ? 'current-password' : 'new-password';
+  $('msg').textContent = '';
+}
+$('tabLogin').onclick = () => setMode('login');
+$('tabReg').onclick = () => setMode('register');
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('msg'), go = $('go');
+  msg.className = 'err'; msg.textContent = '';
+  const username = $('u').value.trim(), password = $('p').value;
+  if (!username || !password){ msg.textContent = 'Enter your username and password.'; return; }
+  go.disabled = true;
+  try {
+    const r = await fetch(mode === 'login' ? '/auth/login' : '/auth/register', {
+      method: 'POST', headers: {'content-type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      let text = body.detail;
+      if (Array.isArray(text)) text = text.map(d => d.msg).join('; ');
+      msg.textContent = text || 'Something went wrong';
+      return;
+    }
+    localStorage.setItem('token', body.token);
+    localStorage.setItem('username', body.user.username);
+    msg.className = 'ok'; msg.textContent = 'Success, taking you in…';
+    location.replace('/app.html');
+  } catch (err) {
+    msg.textContent = 'Cannot reach the server. Is it running?';
+  } finally {
+    go.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
